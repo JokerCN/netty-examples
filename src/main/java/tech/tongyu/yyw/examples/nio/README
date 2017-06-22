@@ -1,0 +1,141 @@
+**
+selector.select(1000)
+selector.selectedKeys() => Set<SelectionKey>
+
+SelectionKey
+key.channel() => ServerSocketChannel/SocketChannel
+
+ServerSocketChannel servChannel
+key.isAccept() ? => SocketChannel sc = servChannel.accept()
+sc.configureBlocking(false);
+sc.register(selector, SelectionKey.OP_READ);
+
+SocketChannel socketChannel
+ByteBuffer readBuffer = ByteBuffer.allocate(1024);
+key.isReadable() ? => int readBytes = socketChannel.read(readBuffer);
+readBytes > 0 ? => readBuffer.flip()
+byte[] bytes = new byte[readBuffer.remaining()];
+readBuffer.get(bytes);
+String body = new String(bytes, "UTF-8");
+
+readBytes < 0 ? => key.cancel(); socketChannel.close();
+
+byte[] bytes = response.getBytes();
+ByteBuffer writeBuffer = new ByteBuffer(bytes.length);
+writeBuffer.put(bytes);
+writeBuffer.flip();
+channel.write(writeBuffer);
+
+1. Buffer与Channel
+Buffer是接口, 以下是实现类
+ByteBuffer, CharBuffer, ShortBuffer, IntBuffer, LongBuffer, FloatBuffer, DoubleBuffer
+
+Channel与流的不同之处在于Channel是双向的, 流只是在一个方向上移动(一个流必须是InputStream或者OutputStream的子类)
+而Channel可以同时读/写
+Channel可以分为两大类: (1)用于网络读写的SelectableChannel和用于文件操作的FileChannel
+
+2. 多路复用器Selector
+Selector提供选择已经就绪的任务的能力:
+-> Selector会不断地轮询注册在其上的Channel, 如果某个Channel发生读或者写时间, 这个Channel就处于就绪状态
+-> 通过SelectionKey可以获取就绪Channel的集合, 进行后续的IO操作
+
+3. 异步非阻塞模式
+ServerSocketChannel servChannel = ServerSocketChannel.open();
+servChannel.configureBlocking(false); // 异步非阻塞模式
+problem?: 还有哪些模式?
+
+4. 设置ServerSocket
+servChannel.socket().bind(new InetSocketsAddress(port), 1024)
+# -> @param endpoint: The IP address and port number to bind to
+# -> @param backlog: requested maximum length of the queue of incoming connections
+
+5. 将channel注册到selector, 并指定监听位
+servChannel.register(selector, SelectionKey.OP_ACCEPT)
+
+6. 轮询是否有在selector中注册的channel就绪了
+while(!stop){
+    try {
+        selector.select(1000); // 轮询执行结束后至少沉寂1s
+        Set<SelectionKey> selectedKeys = selector.selectedKeys(); // 获取就绪channel的key
+        ...
+
+7. 释放selector资源
+selector.close()
+
+8. 处理就绪channel
+if(key.isValid())
+# -> SelectionKey key 是在selector.select()执行之后, 从
+# -> selector.selectedKeys()返回的Set<SelectionKey>中的元素
+
+if(key.isAcceptable())
+# -> 接入请求
+从key获取channel:
+ServerSocketChannel ssc =
+    (ServerSocketChannel)key.channel()
+
+# -> 接受连接请求, 返回SocketChannel
+# -> ServerSocketChannel只接受外部连接请求, 具体的数据交换
+# -> 委托给accept方法返回的SocketChannel
+SocketChannel sc = ssc.accept();
+
+# SocketChannel也需要注册到selector上以委托其监听消息
+sc.configureBlocking(false);// 设为异步非阻塞模式
+
+# -> 接收数据
+if(key.isReadable())
+# 从key获取相应的channel
+SocketChannel sc = (SocketChannel) key.channel();
+# allocate方法开辟缓冲区
+ByteBuffer readBuffer = ByteBuffer.allocate(1024)
+# channel复制数据到缓冲区
+int readBytes = sc.read(readBuffer);
+# 将缓冲区当前的limit设置为position, position设置为0
+if(readBytes > 0){
+    readBuffer.flip()
+# flip以后开始获取数据
+byte[] bytes = new byte[readBuffer.remaining()];
+readBuffer.get(bytes);
+String body = new String(bytes, "UTF-8");
+
+# 如果readBytes < 0 表示该链路已经关闭
+if(readBytes < 0)
+    key.cancel(); // 取消在selector中相应的注册?
+    sc.close(); // 关闭SocketChannel
+
+# 写数据
+byte[] bytes = response.getBytes();
+ByteBuffer writeBuffer = ByteBuffer.allocate(bytes.length);
+writeBuffer.put(bytes);
+writeBuffer.flip();
+channel.write(writeBuffer);
+
+客户端NIO
+1. SocketChannel clientChannel = SocketChannel.open()
+2. clientChannel.configureBlocking(false);
+socket.setReuseAddress(true);
+socket.setReceiveBufferSize(BUFFER_SIZE);
+socket.setSendBufferSize(BUFFER_SIZE);
+3. boolean connected=clientChannel.connect(new InetSocketAddress("ip",port));
+4.
+if(connected){
+    clientChannel.register(selector, SelectionKey.OP_READ, ioHandler);
+}else{
+    clientChannel.register(selector, SelectionKey.OP_CONNECT, ioHandler);
+}
+5. Selector selector = Selector.open();
+new Thread(new ReactorTask()).start()
+
+6.
+int num = selector.select();
+Set selectedKeys = selector.selectedKeys();
+Iterator it = selectedKeys.iterator();
+while(it.hasNext()){
+    SelectionKey key = (SelectionKey) it.next();
+    // ... deal with IO event
+
+7. if(key.isConnectalbe())
+        if(channel.finishConnect()) registerRead();
+
+8. clientChannel.register(selector, SelectionKey.OP_READ, ioHandler);
+
+9. int readNumber = channel.read(receivedBuffer);

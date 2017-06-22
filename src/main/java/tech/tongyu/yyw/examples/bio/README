@@ -1,0 +1,86 @@
+1. Socket与ServerSocket的创建:
+ServerSocket serverSocket = new ServerSocket(port); # -> ServerSocket指将本机作为服务端, 因此无需指定IP
+Socket socket = new Socket("127.0.0.1", port); # -> Socket旨在与Server端链接，因此需要指定目标服务端的IP
+
+1.1 服务端socket获取
+serverSocket.accept() # -> 这里会产生阻塞, 执行到此处会等待外部连接请求
+
+2. Socket输入输出的获取
+BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))
+PrintWriter out = new PrintWriter(socket.getOutputStream(),/*autoflush*/ true)
+
+3. try with resource
+try(
+    Socket socket = new Socket("127.0.0.1", port); # -> 注意分号
+    BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream())); # -> 注意分号
+    PrintWriter out = new PrintWriter(socket.getOutputStream(),/*autoflush*/ true) # -> 分号可有可无
+){
+    //do something...
+}
+
+4. 输入输出数据
+in.readLine() # -> ret:String 输入数据
+out.println(...) # -> param:String 输出数据
+
+5. SimpleDateFormat
+new SimpleDateFormat("YYYY-MM-dd HH:mm:ss").format(new Date()) # -> 注意日期是dd而不是DD
+
+6. ThreadPoolExecutor
+6.1 创建ThreadPoolExecutor
+public ThreadPoolExecutor(int corePoolSize, # -> 线程池中最少维持线程数
+                              int maximumPoolSize, # -> 最大线程数量
+                              long keepAliveTime, # -> 闲置线程经过多久关闭
+                              TimeUnit unit, # -> keepAliveTime的时间单位, 一般TimeUnit.SECONDS
+                              BlockingQueue<Runnable> workQueue, # -> 任务排队序列, 元素需要实现Runnable接口
+                              ThreadFactory threadFactory, # -> 用于创建线程的线程工厂
+                              RejectedExecutionHandler handler) # -> 当线程数量不足或者任务队列已满导致新任务执行阻塞时调用的拒绝方法
+
+6.2 ThreadPoolExecutor executor的使用
+executor.execute(new Runnable(){ ... }); # -> 将Runnable任务加入任务队列中
+
+6.3 一些用到的类型
+TimeUnit.SECONDS
+ArrayBlockingQueue<T> # -> new ArrayBlockingQueue<Runnable>(queueSize);
+
+6.4 ThreadFactory以及创建线程的方式以及RejectedExecutionHandler
+DefaultThreadFactory
+
+DefaultThreadFactory() {
+    SecurityManager s = System.getSecurityManager();
+    group = (s != null) ? s.getThreadGroup() :
+                          Thread.currentThread().getThreadGroup();
+    namePrefix = "pool-" +
+                  poolNumber.getAndIncrement() +
+                 "-thread-";
+}
+
+public Thread newThread(Runnable r) {
+    Thread t = new Thread(group, r,
+                          namePrefix + threadNumber.getAndIncrement(),
+                          0);
+    if (t.isDaemon())
+        t.setDaemon(false);
+    if (t.getPriority() != Thread.NORM_PRIORITY)
+        t.setPriority(Thread.NORM_PRIORITY);
+    return t;
+}
+
+public static class AbortPolicy implements RejectedExecutionHandler {
+    /**
+     * Creates an {@code AbortPolicy}.
+     */
+    public AbortPolicy() { }
+
+    /**
+     * Always throws RejectedExecutionException.
+     *
+     * @param r the runnable task requested to be executed
+     * @param e the executor attempting to execute this task
+     * @throws RejectedExecutionException always
+     */
+    public void rejectedExecution(Runnable r, ThreadPoolExecutor e) {
+        throw new RejectedExecutionException("Task " + r.toString() +
+                                             " rejected from " +
+                                             e.toString());
+    }
+}

@@ -1,0 +1,47 @@
+AsynchronousServerSocketChannel asynchronousServerSocketChannel # 异步服务端socket channel
+asynchronousServerSocketChannel.bind(new InetSocketAddress(port));
+
+AsynchronousServerSocketChannel assc;
+assc.accept(/* attachment */assc, CompletionHandler<AsynchronousSocketChannel, ?>)
+
+--> CompletionHandler<AsynchronousSocketChannel, ?>
+public void completed(AsynchronousSocketChannel result, attachment)
+{
+    # attachment --> contains assc or is assc
+    # 这里完成了AIO的再次续接监听
+    # 在attachment中必须要包含AsynchronousServerSocketChannel的引用
+    # 以便在completed方法中获取并再次实施监听
+    # 方法的第二个参数即监听回调也必须是this, 因为这样
+    # 才能构成监听循环, 当有外部事件发生时, 继续调用completed方法
+    attachment...=> .assc.accept(attachment, this);
+
+    # AsychronousSocketChannel result
+    # 异步socket channel的read方法:
+    # 第一个参数就是buffer
+    # 第二个参数实际上是attachment, 是给回调方法的completed的参数
+    # 回调方法会获取一个Integer result作为参数, 这代表了读入的byte数
+    result.read(buffer, buffer, new ReadCompletionHandler(result));
+
+# ReadCompletionHandler -> completed
+public void completed(Integer result, ByteBuffer attachment){
+    # attachment 作为buffer已经有写进读取的数据了
+    attachment.flip()
+    byte[] bytes = new byte[attachment.remaining()];
+    attachement.get(bytes);
+    // ...
+
+# AsychronousSocketChannel -> write
+channel.write(writeBuffer, writeBuffer,
+    new CompletionHandler<Integer, ByteBuffer>(){
+        @Override
+        public void completed(Integer result, ByteBuffer buffer){
+            # 这里通过回调自己解决了写半包问题, 当buffer有留存时，总会触发下一次写方法
+            # 直到buffer中的数据已经写完
+            if(buffer.hasRemaining()) channel.write(buffer, buffer, this);
+        }
+        //..failed
+        //...
+
+accept -> accept回调 -> accept -> ...
+       -> read -> read 回调
+write -> write回调 -> write -> ...
